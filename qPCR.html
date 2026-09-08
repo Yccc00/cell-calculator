@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>qPCR 实验计算助手</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* 隐藏数字输入框的上下箭头 */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 text-gray-800">
+    <div class="max-w-4xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-indigo-600">
+            <h1 class="text-2xl font-bold text-gray-900 mb-2">qPCR 实验计算助手</h1>
+            <p class="text-gray-500 text-sm">提供逆转录 (RT) 等量加样与 qPCR 反应体系配制的智能化计算。</p>
+        </div>
+
+        <!-- 模块 1：逆转录 (RT) 计算 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div class="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+                <h2 class="text-lg font-bold text-indigo-700 flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                    逆转录 (RT) 等量加样计算
+                </h2>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">
+                        目标 RNA 总量 <span class="text-xs font-normal text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded ml-1">(自动设定, 上限1000ng)</span>
+                    </label>
+                    <div class="relative">
+                        <input type="number" id="rt-target-mass" class="w-full pl-3 pr-10 py-2 bg-gray-200 text-gray-600 border border-gray-300 rounded-md shadow-sm focus:outline-none sm:text-sm font-medium" readonly value="0">
+                        <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 sm:text-sm">ng</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">基于最低浓度样本及最大允许体积自动推算</p>
+                </div>
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">单管最大允许体积</label>
+                    <div class="relative">
+                        <input type="number" id="rt-max-vol" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value="7">
+                        <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 sm:text-sm">μL</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 样本列表动态表格 -->
+            <div class="border rounded-lg overflow-hidden mb-4">
+                <table class="min-w-full divide-y divide-gray-200 text-center">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">样本编号</th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">RNA 浓度 (ng/μL)</th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-indigo-600 uppercase tracking-wider">所需 RNA 体积 (μL)</th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-blue-600 uppercase tracking-wider">补加 ddH2O (μL)</th>
+                            <th scope="col" class="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rt-samples-body" class="bg-white divide-y divide-gray-200">
+                        <!-- 动态行在此生成 -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+                <button onclick="addSampleRow()" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+                    添加样本行
+                </button>
+            </div>
+        </div>
+
+        <!-- 模块 2：qPCR 体系计算 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div class="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+                <h2 class="text-lg font-bold text-green-700 flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                    qPCR 反应体系及稀释计算
+                </h2>
+                <div class="flex items-center bg-gray-100 rounded-md p-1 px-3">
+                    <label class="text-sm font-medium text-gray-700 mr-2">目标管数(孔):</label>
+                    <input type="number" id="qpcr-wells" class="w-20 pl-2 pr-2 py-1 border border-gray-300 rounded text-center text-sm focus:ring-green-500 focus:border-green-500" value="18">
+                </div>
+            </div>
+
+            <!-- 第一部分：预混液与体系设定 (左右分栏) -->
+            <div class="flex flex-col lg:flex-row gap-6 mb-6">
+                
+                <!-- 预混液单孔体积设定 -->
+                <div class="flex-1 bg-green-50 p-4 rounded-lg border border-green-100">
+                    <h3 class="text-sm font-bold text-green-800 mb-3 border-b border-green-200 pb-2">第一部分：Master Mix 体系设定 (单管)</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <label class="text-sm text-gray-700 font-medium">SYBR/TaqMan Mix:</label>
+                            <div class="relative w-24">
+                                <input type="number" id="qpcr-mix" class="w-full pl-2 pr-8 py-1 border border-gray-300 rounded text-sm qpcr-input text-right" value="10">
+                                <span class="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500 text-xs">μL</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <label class="text-sm text-gray-700 font-medium">Primer F:</label>
+                            <div class="relative w-24">
+                                <input type="number" id="qpcr-primer-f" class="w-full pl-2 pr-8 py-1 border border-gray-300 rounded text-sm qpcr-input text-right" value="0.8">
+                                <span class="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500 text-xs">μL</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <label class="text-sm text-gray-700 font-medium text-orange-600">ROX Dye (按需):</label>
+                            <div class="relative w-24">
+                                <input type="number" id="qpcr-rox" class="w-full pl-2 pr-8 py-1 border border-gray-300 rounded text-sm qpcr-input text-right" value="0.4">
+                                <span class="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500 text-xs">μL</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <label class="text-sm text-gray-700 font-medium">Primer R:</label>
+                            <div class="relative w-24">
+                                <input type="number" id="qpcr-primer-r" class="w-full pl-2 pr-8 py-1 border border-gray-300 rounded text-sm qpcr-input text-right" value="0.8">
+                                <span class="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500 text-xs">μL</span>
+                            </div>
+                        </div>
+                        <!-- 自动计算的补水项目 -->
+                        <div class="flex justify-between items-center pt-2 border-t border-green-200">
+                            <label class="text-sm text-blue-700 font-medium">ddH2O (体系补充水):</label>
+                            <div class="relative w-24">
+                                <input type="number" id="qpcr-water-makeup" class="w-full pl-2 pr-8 py-1 bg-gray-200 text-gray-600 border border-gray-300 rounded text-sm text-right" readonly value="0">
+                                <span class="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500 text-xs">μL</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 批量配方结果展示 -->
+                <div class="flex-1 bg-white p-4 rounded-lg border-2 border-green-200 shadow-sm">
+                    <div class="flex justify-between items-end mb-3 border-b border-gray-200 pb-2">
+                        <h3 class="text-sm font-bold text-gray-800">Mix 批量配制方案</h3>
+                        <span class="text-xs text-gray-500">自动计入 <span id="mix-calc-wells" class="font-bold text-green-600">--</span> 孔 (含2孔余裕)</span>
+                    </div>
+                    <ul class="space-y-2 text-sm">
+                        <li class="flex justify-between"><span class="text-gray-600">SYBR/TaqMan Mix:</span> <span id="res-mix" class="font-bold text-gray-800">--</span></li>
+                        <li class="flex justify-between"><span class="text-gray-600">Primer F:</span> <span id="res-primer-f" class="font-medium text-gray-800">--</span></li>
+                        <li class="flex justify-between"><span class="text-orange-600">ROX Dye:</span> <span id="res-rox" class="font-medium text-gray-800">--</span></li>
+                        <li class="flex justify-between"><span class="text-gray-600">Primer R:</span> <span id="res-primer-r" class="font-medium text-gray-800">--</span></li>
+                        <li class="flex justify-between"><span class="text-blue-600">ddH2O (补充水):</span> <span id="res-water-makeup" class="font-medium text-gray-800">--</span></li>
+                        <li class="flex justify-between pt-2 border-t border-gray-100 mt-2">
+                            <span class="font-bold text-gray-800">每孔分装 Mix 量:</span>
+                            <span id="res-single-mix-total" class="font-bold text-green-700 text-lg">--</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 第二部分：cDNA 设定与总计 (左右分栏) -->
+            <div class="flex flex-col lg:flex-row gap-6">
+                
+                <!-- cDNA 单孔体积与体系设定 -->
+                <div class="flex-1 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <h3 class="text-sm font-bold text-blue-800 mb-3 border-b border-blue-200 pb-2">第二部分：cDNA 稀释与上样</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <label class="text-sm text-gray-700 font-medium" title="用于计算加水量的标准体积">稀释计算基准单孔体积:</label>
+                            <div class="relative w-24">
+                                <input type="number" id="qpcr-base-cdna" class="w-full pl-2 pr-8 py-1 border border-gray-300 rounded text-sm qpcr-input text-right text-blue-700 font-bold" value="8">
+                                <span class="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500 text-xs">μL</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <label class="text-sm text-gray-700 font-medium" title="真正加入qPCR管中的体积，若小于基准，则差额用水补齐">实际单孔 cDNA 上样量:</label>
+                            <div class="relative w-24">
+                                <input type="number" id="qpcr-actual-cdna" class="w-full pl-2 pr-8 py-1 border border-gray-300 rounded text-sm qpcr-input text-right text-blue-700 font-bold" value="8">
+                                <span class="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500 text-xs">μL</span>
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-between items-center pt-2 border-t border-blue-200">
+                            <label class="text-sm text-gray-800 font-bold">单孔预期总体积:</label>
+                            <div class="relative w-24">
+                                <input type="number" id="qpcr-total-target" class="w-full pl-2 pr-8 py-1 border border-gray-400 bg-white rounded text-sm qpcr-input text-right font-bold" value="20">
+                                <span class="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500 text-xs">μL</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 稀释加水计算与浓度预测 -->
+                <div class="flex-1 bg-white p-4 rounded-lg border-2 border-blue-200 shadow-sm relative">
+                    <div class="flex justify-between items-end mb-2 border-b border-gray-200 pb-2">
+                        <h3 class="text-sm font-bold text-gray-800">cDNA 稀释操作与浓度预估</h3>
+                        <span class="text-xs text-gray-500">原液默认 <span class="font-bold">20μL</span></span>
+                    </div>
+                    
+                    <div class="flex justify-between items-center mb-1 text-sm">
+                        <span class="text-gray-600">稀释液总体积:</span>
+                        <span id="dilution-total-vol" class="font-medium text-gray-800">--</span>
+                    </div>
+                    <div class="flex justify-between items-center mb-3 border-b border-gray-100 pb-2">
+                        <span class="text-blue-800 font-bold">向 RT 原液中加 ddH2O:</span>
+                        <span id="dilution-water-add" class="font-bold text-blue-700 text-lg">--</span>
+                    </div>
+
+                    <!-- 浓度三项指标解耦 -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-gray-600" title="在稀释管中的浓度 = 总RNA / 稀释液总体积">稀释管内 cDNA 浓度:</span>
+                            <span id="dilution-tube-conc" class="font-medium">--</span>
+                        </div>
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-gray-600" title="实际加入单孔反应体系的等效 RNA 质量 = 管内浓度 × 实际上样量">单孔等效 RNA 质量:</span>
+                            <span id="dilution-mass-per-well" class="font-medium text-gray-800">--</span>
+                        </div>
+                        <div class="flex justify-between items-center text-sm pt-1 border-t border-gray-100 mt-1">
+                            <span class="text-gray-800 font-medium" title="在最终 qPCR 体系中的浓度 = 单孔质量 / 预期总体积">qPCR 体系最终浓度:</span>
+                            <span id="dilution-final-conc" class="font-bold text-blue-700">--</span>
+                        </div>
+                    </div>
+                    <p id="dilution-conc-warning" class="text-xs text-red-500 mt-2 hidden">提示：当前稀释管内浓度不在 1-10 ng/μL 推荐范围内。</p>
+                </div>
+
+            </div>
+            
+        </div>
+    </div>
+
+    <script>
+        let sampleCount = 0;
+
+        // 初始化时添加三个空行
+        window.onload = function() {
+            addSampleRow();
+            addSampleRow();
+            addSampleRow();
+            
+            // 绑定事件监听以实现自动计算
+            document.getElementById('rt-max-vol').addEventListener('input', calculateRT);
+            
+            // qPCR模块的自动计算绑定
+            const qpcrInputs = document.querySelectorAll('.qpcr-input, #qpcr-wells');
+            qpcrInputs.forEach(input => {
+                input.addEventListener('input', calculateQPCR);
+            });
+            
+            calculateQPCR(); // 初始化一次
+        };
+
+        function addSampleRow() {
+            sampleCount++;
+            const tbody = document.getElementById('rt-samples-body');
+            const tr = document.createElement('tr');
+            tr.id = `sample-row-${sampleCount}`;
+            tr.innerHTML = `
+                <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-gray-900">#${sampleCount}</td>
+                <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-500">
+                    <input type="number" class="w-24 px-2 py-1 border border-gray-300 rounded text-center rt-conc-input" placeholder="输入" oninput="calculateRT()">
+                </td>
+                <td class="px-6 py-2 whitespace-nowrap text-sm font-bold text-indigo-600 rna-vol">-</td>
+                <td class="px-6 py-2 whitespace-nowrap text-sm font-bold text-blue-600 water-vol">-</td>
+                <td class="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
+                    <button onclick="removeSampleRow(${sampleCount})" class="text-red-500 hover:text-red-700">删除</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        function removeSampleRow(id) {
+            const row = document.getElementById(`sample-row-${id}`);
+            if (row) {
+                row.remove();
+                calculateRT(); // 删除后重新计算
+            }
+        }
+
+        function getTargetMass() {
+            return parseFloat(document.getElementById('rt-target-mass').value) || 0;
+        }
+
+        // 逆转录计算逻辑
+        function calculateRT() {
+            const maxVol = parseFloat(document.getElementById('rt-max-vol').value) || 7;
+            const concInputs = document.querySelectorAll('.rt-conc-input');
+            
+            let minConc = Infinity;
+            let hasValidData = false;
+
+            // 第一遍扫描：找到最小有效浓度
+            concInputs.forEach(input => {
+                const conc = parseFloat(input.value);
+                if (conc > 0) {
+                    hasValidData = true;
+                    if (conc < minConc) {
+                        minConc = conc;
+                    }
+                }
+            });
+
+            // 自动设定目标总质量 (上限1000)
+            let autoTargetMass = 0;
+            if (hasValidData) {
+                autoTargetMass = minConc * maxVol;
+                if (autoTargetMass > 1000) {
+                    autoTargetMass = 1000;
+                }
+            }
+            document.getElementById('rt-target-mass').value = autoTargetMass > 0 ? autoTargetMass.toFixed(2) : '0';
+            
+            const targetMass = autoTargetMass;
+
+            // 第二遍扫描：计算每行的体积并更新 qPCR 的浓度预测
+            concInputs.forEach(input => {
+                const tr = input.closest('tr');
+                const rnaVolCell = tr.querySelector('.rna-vol');
+                const waterVolCell = tr.querySelector('.water-vol');
+                const conc = parseFloat(input.value);
+
+                if (conc > 0 && targetMass > 0) {
+                    const rnaVol = targetMass / conc;
+                    const waterVol = maxVol - rnaVol;
+
+                    rnaVolCell.innerText = rnaVol.toFixed(2);
+                    waterVolCell.innerText = waterVol < 0 ? "超限!" : waterVol.toFixed(2);
+                    
+                    if(waterVol < 0) {
+                        waterVolCell.classList.remove('text-blue-600');
+                        waterVolCell.classList.add('text-red-600');
+                    } else {
+                        waterVolCell.classList.add('text-blue-600');
+                        waterVolCell.classList.remove('text-red-600');
+                    }
+                } else {
+                    rnaVolCell.innerText = "-";
+                    waterVolCell.innerText = "-";
+                }
+            });
+
+            // RT 质量改变时，联动更新下方的浓度预估
+            calculateQPCR();
+        }
+
+        // qPCR 体系及稀释统一计算逻辑
+        function calculateQPCR() {
+            // --- 基础参数获取 ---
+            const wells = parseInt(document.getElementById('qpcr-wells').value) || 0;
+            const calcWells = wells > 0 ? wells + 2 : 0; // 统一的余裕孔数
+            
+            const mix = parseFloat(document.getElementById('qpcr-mix').value) || 0;
+            const primerF = parseFloat(document.getElementById('qpcr-primer-f').value) || 0;
+            const rox = parseFloat(document.getElementById('qpcr-rox').value) || 0;
+            const primerR = parseFloat(document.getElementById('qpcr-primer-r').value) || 0;
+            
+            const baseCdnaVol = parseFloat(document.getElementById('qpcr-base-cdna').value) || 8;
+            const actualCdnaVol = parseFloat(document.getElementById('qpcr-actual-cdna').value) || 8;
+            const totalTargetVol = parseFloat(document.getElementById('qpcr-total-target').value) || 20;
+
+            // --- 1. Master Mix 智能补水计算 ---
+            // 补水逻辑：目标总体积 - 各项固定组分 - 实际cDNA上样量
+            let makeupWater = totalTargetVol - mix - primerF - rox - primerR - actualCdnaVol;
+            // 防止算出负数水
+            if(makeupWater < 0) makeupWater = 0; 
+            
+            // 更新界面的补水量
+            document.getElementById('qpcr-water-makeup').value = makeupWater.toFixed(2);
+
+            // 批量配方计算
+            document.getElementById('mix-calc-wells').innerText = calcWells;
+            
+            if (calcWells > 0) {
+                document.getElementById('res-mix').innerText = `${(mix * calcWells).toFixed(1)} μL`;
+                document.getElementById('res-primer-f').innerText = `${(primerF * calcWells).toFixed(1)} μL`;
+                document.getElementById('res-rox').innerText = `${(rox * calcWells).toFixed(1)} μL`;
+                document.getElementById('res-primer-r').innerText = `${(primerR * calcWells).toFixed(1)} μL`;
+                document.getElementById('res-water-makeup').innerText = `${(makeupWater * calcWells).toFixed(1)} μL`;
+                
+                // 单孔 Mix 总量
+                const singleMixTotal = mix + primerF + rox + primerR + makeupWater;
+                document.getElementById('res-single-mix-total').innerText = `${singleMixTotal.toFixed(1)} μL`;
+            } else {
+                ['res-mix', 'res-primer-f', 'res-rox', 'res-primer-r', 'res-water-makeup', 'res-single-mix-total'].forEach(id => {
+                    document.getElementById(id).innerText = "--";
+                });
+            }
+
+            // --- 2. cDNA 稀释计算 ---
+            const rtOriginalVol = 20; // 默认逆转录体系 20μL
+            
+            // 稀释计算基于基准单孔体积，而非实际加样量
+            const totalDilutionVol = calcWells * baseCdnaVol;
+            const waterToAddToRT = totalDilutionVol - rtOriginalVol;
+
+            document.getElementById('dilution-total-vol').innerText = `${totalDilutionVol.toFixed(1)} μL`;
+            
+            const waterDisplay = document.getElementById('dilution-water-add');
+            if (waterToAddToRT < 0 && totalDilutionVol > 0) {
+                waterDisplay.innerText = "需反向浓缩(稀释液体积<20)!";
+                waterDisplay.className = "font-bold text-red-600 text-lg";
+            } else if (totalDilutionVol > 0) {
+                waterDisplay.innerText = `${waterToAddToRT.toFixed(1)} μL`;
+                waterDisplay.className = "font-bold text-blue-700 text-lg";
+            } else {
+                waterDisplay.innerText = "--";
+                waterDisplay.className = "font-bold text-gray-500 text-lg";
+            }
+
+            // --- 3. 浓度预估解耦计算 ---
+            const targetMass = getTargetMass();
+            const tubeConcSpan = document.getElementById('dilution-tube-conc');
+            const massSpan = document.getElementById('dilution-mass-per-well');
+            const finalConcSpan = document.getElementById('dilution-final-conc');
+            const warningP = document.getElementById('dilution-conc-warning');
+
+            if (targetMass > 0 && totalDilutionVol > 0 && totalTargetVol > 0) {
+                // 指标 1：稀释管内的浓度 = 逆转录总 RNA / 稀释液总体积
+                const tubeConc = targetMass / totalDilutionVol;
+                // 指标 2：实际单孔加样的等效 RNA 质量 = 稀释管浓度 × 实际加样体积
+                const massPerWell = tubeConc * actualCdnaVol;
+                // 指标 3：qPCR 反应体系中的最终浓度 = 单孔质量 / 体系总体积
+                const finalConc = massPerWell / totalTargetVol;
+                
+                massSpan.innerText = `${massPerWell.toFixed(2)} ng/孔`;
+                finalConcSpan.innerText = `${finalConc.toFixed(2)} ng/μL`;
+
+                // 稀释管浓度 1-10ng/uL 判定
+                tubeConcSpan.innerText = `${tubeConc.toFixed(2)} ng/μL`;
+                if (tubeConc >= 1 && tubeConc <= 10) {
+                    tubeConcSpan.className = "font-medium text-green-600";
+                    warningP.classList.add('hidden');
+                } else {
+                    tubeConcSpan.className = "font-medium text-red-600";
+                    warningP.classList.remove('hidden');
+                }
+            } else {
+                tubeConcSpan.innerText = "--";
+                tubeConcSpan.className = "font-medium";
+                massSpan.innerText = "--";
+                finalConcSpan.innerText = "--";
+                warningP.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
